@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChatGPT Replica</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --light-bg: #f9f9f9;
+      --light-text: #1a1a1a;
+      --light-input: #ffffff;
+      --light-border: #d0d0d0;
+
+      --dark-bg: #1e1e1e;
+      --dark-text: #eaeaea;
+      --dark-input: #2c2c2c;
+      --dark-border: #3c3c3c;
+
+      --primary: #10a37f;
+      --accent: #0f62fe;
+    }
+
+    [data-theme="light"] {
+      --bg: var(--light-bg);
+      --text: var(--light-text);
+      --input: var(--light-input);
+      --border: var(--light-border);
+    }
+
+    [data-theme="dark"] {
+      --bg: var(--dark-bg);
+      --text: var(--dark-text);
+      --input: var(--dark-input);
+      --border: var(--dark-border);
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      transition: 0.3s ease-in-out;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .toggle-theme {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text);
+      font-size: 1.2rem;
+    }
+
+    #chat-box {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 2rem;
+    }
+
+    .chat-msg {
+      position: relative;
+      margin-bottom: 1.5rem;
+      max-width: 700px;
+    }
+
+    .user, .ai {
+      line-height: 1.6;
+      background: none;
+      border: none;
+      padding: 0;
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .user {
+      margin-left: auto;
+      text-align: right;
+      font-weight: 600;
+    }
+
+    .ai {
+      text-align: left;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 0;
+      right: -30px;
+      background: none;
+      border: none;
+      color: var(--text);
+      cursor: pointer;
+      opacity: 0.4;
+      font-size: 0.9rem;
+    }
+
+    .copy-btn:hover {
+      opacity: 1;
+    }
+
+    footer {
+      display: flex;
+      gap: 0.5rem;
+      padding: 1rem 2rem;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 0.8rem 1rem;
+      font-size: 1rem;
+      border: 1px solid var(--border);
+      background: var(--input);
+      color: var(--text);
+      border-radius: 12px;
+      outline: none;
+    }
+
+    button {
+      padding: 0.8rem 1.2rem;
+      font-size: 1rem;
+      border: none;
+      background: var(--primary);
+      color: white;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #0e8e6f;
+    }
+
+    .mic-btn {
+      background: #4caf50;
+    }
+
+    .mic-btn.listening {
+      background: #ff9800;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255,152,0, 0.6); }
+      70% { box-shadow: 0 0 0 10px rgba(255,152,0, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,152,0, 0); }
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background-color: var(--border);
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><i class="fas fa-robot"></i> Orion AI</h1>
+    <button class="toggle-theme" onclick="toggleTheme()"><i class="fas fa-adjust"></i></button>
+  </header>
+
+  <div id="chat-box"></div>
+
+  <footer>
+    <input type="text" id="user-input" placeholder="Ask me anything..." onkeypress="handleKey(event)" />
+    <button class="mic-btn" onclick="toggleMic()"><i class="fas fa-microphone"></i></button>
+    <button onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js/lib/common.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js/styles/github-dark.min.css" />
+  <script>
+    const chatBox = document.getElementById("chat-box");
+    const input = document.getElementById("user-input");
+    const micBtn = document.querySelector('.mic-btn');
+    let recognition;
+    let isListening = false;
+
+    function toggleTheme() {
+      const root = document.documentElement;
+      const currentTheme = root.getAttribute("data-theme");
+      root.setAttribute("data-theme", currentTheme === "dark" ? "light" : "dark");
+    }
+
+    function handleKey(e) {
+      if (e.key === "Enter") sendMessage();
+    }
+
+    function appendMessage(role, content) {
+      const msgDiv = document.createElement("div");
+      msgDiv.className = `chat-msg ${role}`;
+      const id = "msg-" + Date.now();
+
+      if (role === "ai") {
+        msgDiv.innerHTML = `
+          <div id="${id}" class="ai"><strong>AI:</strong> <div class="ai-response"></div></div>
+          <button class="copy-btn" onclick="copyToClipboard('${id}')">📋</button>
+        `;
+        chatBox.appendChild(msgDiv);
+        typeHTML(id, content);
+        speak(stripHTML(content));
+      } else {
+        msgDiv.innerHTML = `<p class="user">You: ${content}</p>`;
+        chatBox.appendChild(msgDiv);
+      }
+
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function typeHTML(id, html) {
+      const container = document.querySelector(`#${id} .ai-response`);
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+      const nodes = Array.from(temp.childNodes);
+      let index = 0;
+
+      function typeNextNode() {
+        if (index < nodes.length) {
+          container.appendChild(nodes[index]);
+          index++;
+          setTimeout(typeNextNode, 15);
+        } else {
+          hljs.highlightAll();
+        }
+      }
+
+      typeNextNode();
+    }
+
+    function stripHTML(html) {
+      const div = document.createElement("div");
+      div.innerHTML = html;
+      return div.textContent || div.innerText || "";
+    }
+
+    function copyToClipboard(id) {
+      const content = document.querySelector(`#${id} .ai-response`);
+      const text = stripHTML(content.innerHTML);
+      navigator.clipboard.writeText(text).then(() => {
+        alert("Copied to clipboard!");
+      });
+    }
+
+    async function sendMessage() {
+      const message = input.value.trim();
+      if (!message) return;
+
+      appendMessage("user", message);
+      input.value = "";
+
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message })
+      });
+
+      const data = await res.json();
+      appendMessage("ai", data.reply);
+    }
+
+    function toggleMic() {
+      if (!("webkitSpeechRecognition" in window)) {
+        alert("Speech Recognition not supported in this browser.");
+        return;
+      }
+
+      if (!recognition) {
+        recognition = new webkitSpeechRecognition();
+        recognition.lang = "en-US";
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onresult = (event) => {
+          const speech = event.results[0][0].transcript;
+          input.value = speech;
+          sendMessage();
+        };
+
+        recognition.onerror = (event) => {
+          alert("Speech error: " + event.error);
+        };
+
+        recognition.onend = () => {
+          isListening = false;
+          micBtn.classList.remove("listening");
+        };
+      }
+
+      if (isListening) {
+        recognition.stop();
+      } else {
+        isListening = true;
+        micBtn.classList.add("listening");
+        recognition.start();
+      }
+    }
+
+  
+  </script>
+</body>
+</html>
